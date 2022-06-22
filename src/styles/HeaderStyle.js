@@ -29,7 +29,6 @@ const HeaderDiv = styled.div`
     a {
       color: inherit;
       margin: 0 auto;
-
       text-decoration: none;
       font-size: 18px;
       font-weight: 600;
