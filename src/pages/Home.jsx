@@ -4,97 +4,111 @@ import { useDispatch, useSelector } from "react-redux";
 import { funcGetNews } from "../reducers/newsSlice";
 import { useInView } from "react-intersection-observer";
 import NewsItem from "../components/NewsItem";
+import { clearNews } from "../reducers/newsSlice";
 
 function Home() {
-  //무한스크롤(주선)
-  const [number, setNumber] = React.useState(1);
-  // 검색 input 내용
-  const [term, setTerm] = React.useState("");
-  // search history hidden
-  const [isHidden, setIsHidden] = React.useState(true);
-  const [sHistoryItem, setsHistoryItem] = React.useState([]);
-  const { ref, inView } = useInView();
+    //무한스크롤(주선)
+    const [number, setNumber] = React.useState(1);
+    console.log('number',number)
 
-  // redux
-  const dispatch = useDispatch();
-  const newsList = useSelector((state) => state.newsSlice);
+    // 검색 input 내용
+    const [term, setTerm] = React.useState("");
 
-  // EventHandle
-  const inputFocusHandle = () => {
-    const result = [];
-    const localData = localStorage.getItem("searchHistory");
-    const historyData = JSON.parse(localData);
+    // search history hidden
+    const [isHidden, setIsHidden] = React.useState(true);
+    const [sHistoryItem, setsHistoryItem] = React.useState([]);
+    const { ref, inView } = useInView();
 
-    historyData.forEach((el) => {
-      const data = {
-        key: new Date().getTime() + Math.random(),
-        value: el,
-      };
+    // redux
+    const dispatch = useDispatch();
+    const newsList = useSelector((state) => state.newsSlice);
+    const scrollFlag = useSelector((state) => state.newsSlice.scrollFlag);
 
-      result.push(data);
-    });
+    // EventHandle
+    const inputFocusHandle = () => {
+        const result = [];
+        const localData = JSON.parse(localStorage.getItem("searchHistory"));
 
-    console.log("result", result);
+        if(localData.length > 0 ){
+          localData.forEach((el) => {
+            const data = {
+                key: new Date().getTime() + Math.random(),
+                value: el,
+            };
 
-    setIsHidden(false);
-    setsHistoryItem([...result]);
-  };
+            result.push(data);
+        });
 
-  const inputBlurHandle = () => {
-    setIsHidden(true);
-    setsHistoryItem([]);
-  };
+        setIsHidden(false);
+        setsHistoryItem([...result]);
+        }
+        
+    };
 
-  //localStorage 생성_최다현
+    const inputBlurHandle = () => {
+        setIsHidden(true);
+        setsHistoryItem([]);
+    };
 
-  React.useEffect(() => {
-    if (window.localStorage.getItem("searchHistory") === null) {
-      localStorage.setItem("searchHistory", JSON.stringify([]));
+    //localStorage 생성_최다현
+
+    React.useEffect(() => {
+        if (window.localStorage.getItem("searchHistory") === null) {
+            localStorage.setItem("searchHistory", JSON.stringify([]));
+        }
+
+        if (window.localStorage.getItem("clipHistory") === null) {
+            localStorage.setItem("clipHistory", JSON.stringify([]));
+        }
+    }, []);
+
+
+    //localStorage 저장_최다현
+    function saveSearchList(term) {
+        let searchHistory = localStorage.getItem("searchHistory");
+        searchHistory = JSON.parse(searchHistory);
+
+        //중복제거
+        if (searchHistory.includes(term)) {
+            searchHistory = searchHistory.filter((el) => {
+                return term !== el;
+            });
+        }
+
+        if (searchHistory.length > 4) {
+            searchHistory.pop();
+            searchHistory.unshift(term);
+        } else {
+            searchHistory.unshift(term);
+        }
+        localStorage.setItem("searchHistory", JSON.stringify(searchHistory));
     }
-  }, []);
-
-  //localStorage 저장_최다현
-  function saveSearchList(term) {
-    let searchHistory = localStorage.getItem("searchHistory");
-    searchHistory = JSON.parse(searchHistory);
-
-    //중복제거
-    if (searchHistory.includes(term)) {
-      searchHistory = searchHistory.filter((el) => {
-        return term !== el;
-      });
-    }
-
-    if (searchHistory.length > 4) {
-      searchHistory.pop();
-      searchHistory.unshift(term);
-    } else {
-      searchHistory.unshift(term);
-    }
-    localStorage.setItem("searchHistory", JSON.stringify(searchHistory));
-  }
-
+  
   // useEffect
   React.useEffect(() => {
     // 검색 내용 없으면 return
-    if (term === "" || term.length === 0) return;
+    if (term === "" || term.length === 0) {
+      dispatch(clearNews())
+      return;
+    }
+      
 
     // 0.5초 검색
     const searchTimeout = setTimeout(() => {
-      console.log("1.검색시작");
-
       const body = {
         // 검색내용
         term,
         // 페이지
         page: 1,
+        // isScroll
+        isScroll: false,
       };
       // MiddleWare에서 실행하는 비동기 함수 호출
       dispatch(funcGetNews(body));
       // localStorage 저장 함수 호출
       saveSearchList(term);
-
       inputFocusHandle();
+      
     }, 500);
 
     return () => {
@@ -104,15 +118,23 @@ function Home() {
 
   //inView가 true가 될 때 다음페이지 호출(주선)
   React.useEffect(() => {
-    if (inView) {
-      setNumber((prev) => prev + 1);
 
-      if (term === "" || term.length === 0) return;
-      const body = {
-        term,
-        page: number,
-      };
-      dispatch(funcGetNews(body));
+    if (inView) {
+      if (scrollFlag) {
+        setNumber((prev) => prev + 1);
+
+        if (term === "" || term.length === 0) return;
+        const body = {
+          term,
+          page: number + 1,
+          isScroll: true,
+          newsList,
+        };
+        console.log("count page:", body.page);
+        dispatch(funcGetNews(body));
+      } else {
+        alert("마지막 페이지 입니다.")
+      }
     }
   }, [inView]);
 
@@ -134,24 +156,28 @@ function Home() {
               })}
           </div>
         </div>
-
-        <NewsDiv>
-          {newsList.length < 0
-            ? null
-            : newsList.news.map((item, idx) => {
-                return (
-                  <NewsItem
-                    key={item._id}
-                    pub_date={item.pub_date.substr(0, 10)}
-                    headline={item.headline.main}
-                    snippet={item.snippet}
-                    web_url={item.web_url}
-                    item={item}
-                  />
-                );
-              })}
-          <div ref={ref}></div>
-        </NewsDiv>
+        
+        {
+              <NewsDiv>
+                {newsList.news.length < 0
+                  ? null
+                  : newsList.news.map((el, idx) => {
+                    return (
+                      <NewsItem
+                        key={el.item._id}
+                        id={el.item._id}
+                        pub_date={el.item.pub_date.substr(0, 10)}
+                        headline={el.item.headline.main}
+                        snippet={el.item.snippet}
+                        web_url={el.item.web_url}
+                        item={el}
+                        isClip={el.isClip}
+                      />
+                    );
+                  })}
+                <div ref={ref}></div>
+              </NewsDiv>
+        }        
       </HomeDiv>
     </>
   );
